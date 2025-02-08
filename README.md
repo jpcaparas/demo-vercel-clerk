@@ -1,5 +1,7 @@
 # Next.js + Clerk.com Demo
 
+![image](https://github.com/user-attachments/assets/2646879c-2d67-4d0b-812f-c179f9fe794e)
+
 This is a demonstration project showcasing the integration of [Clerk.com](https://clerk.com) with Next.js 15 for robust user management and authentication. It serves as a practical example of implementing user authentication, management, and security features in a modern Next.js application.
 
 ## Features
