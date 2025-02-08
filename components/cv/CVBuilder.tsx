@@ -22,12 +22,54 @@ export default function CVBuilder() {
   const { userId } = useAuth();
   const dispatch = useDispatch();
   const cvData = useSelector((state: RootState) => state.cv);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastSavedData, setLastSavedData] = useState<string>('');
+  const [isDataReady, setIsDataReady] = useState(false);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+  const initialLoadComplete = useRef(false);
+
+  const loadUserData = useCallback(async () => {
+    if (!userId) return;
+    
+    try {
+      const response = await fetch('/api/cv/load');
+      if (response.ok) {
+        const data = await response.json();
+        dispatch(setCVData(data));
+        setLastSavedData(JSON.stringify(data));
+        setIsDataReady(true);
+      }
+    } catch {
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to load CV data. Please try refreshing the page.',
+        color: 'red',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId, dispatch]);
+
+  // Initial load effect
+  useEffect(() => {
+    if (!initialLoadComplete.current && userId) {
+      loadUserData();
+      initialLoadComplete.current = true;
+    }
+  }, [userId, loadUserData]);
+
+  // Periodic sync effect
+  useEffect(() => {
+    if (!userId || !isDataReady) return;
+
+    const intervalId = setInterval(loadUserData, 30000);
+    return () => clearInterval(intervalId);
+  }, [userId, loadUserData, isDataReady]);
 
   const handleSave = useCallback(async () => {
+    if (!isDataReady) return;
+
     const payload = JSON.stringify(cvData);
     if (payload.length > MAX_PAYLOAD_SIZE) {
       notifications.show({
@@ -66,37 +108,11 @@ export default function CVBuilder() {
     } finally {
       setIsSaving(false);
     }
-  }, [cvData]);
-
-  useEffect(() => {
-    const loadUserData = async () => {
-      if (!userId) return;
-      
-      setIsLoading(true);
-      try {
-        const response = await fetch('/api/cv/load');
-        if (response.ok) {
-          const data = await response.json();
-          dispatch(setCVData(data));
-          setLastSavedData(JSON.stringify(data));
-        }
-      } catch {
-        notifications.show({
-          title: 'Error',
-          message: 'Failed to load CV data. Please try refreshing the page.',
-          color: 'red',
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadUserData();
-  }, [userId, dispatch]);
+  }, [cvData, isDataReady]);
 
   useEffect(() => {
     const currentData = JSON.stringify(cvData);
-    if (!isLoading && lastSavedData !== currentData) {
+    if (!isLoading && isDataReady && lastSavedData !== currentData) {
       if (debounceTimeout.current) {
         clearTimeout(debounceTimeout.current);
       }
@@ -105,9 +121,11 @@ export default function CVBuilder() {
         setLastSavedData(currentData);
       }, AUTOSAVE_DELAY);
     }
-  }, [cvData, isLoading, lastSavedData, handleSave]);
+  }, [cvData, isLoading, lastSavedData, handleSave, isDataReady]);
 
   const handleBlur = () => {
+    if (!isDataReady) return;
+    
     const currentData = JSON.stringify(cvData);
     if (lastSavedData !== currentData) {
       if (debounceTimeout.current) {
@@ -117,6 +135,15 @@ export default function CVBuilder() {
       setLastSavedData(currentData);
     }
   };
+
+  if (!isDataReady) {
+    return (
+      <div className="max-w-4xl mx-auto relative">
+        <LoadingOverlay visible={true} />
+        <div className="min-h-[400px]" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto relative" onBlur={handleBlur}>
